@@ -4,7 +4,9 @@ import {
   Bath,
   BedDouble,
   Building2,
+  Crosshair,
   ListFilter,
+  LocateFixed,
   MapPin,
   Maximize2,
   Search,
@@ -17,6 +19,41 @@ import {
   Property,
 } from "../lib/puntahogar";
 
+type UserLocation = {
+  latitude: number;
+  longitude: number;
+};
+
+type PropertyWithDistance = Property & {
+  distanceKm?: number;
+};
+
+function distanceInKm(
+  latitude1: number,
+  longitude1: number,
+  latitude2: number,
+  longitude2: number,
+) {
+  const radius = 6371;
+  const toRadians = (value: number) =>
+    (value * Math.PI) / 180;
+
+  const latitudeDifference = toRadians(
+    latitude2 - latitude1,
+  );
+  const longitudeDifference = toRadians(
+    longitude2 - longitude1,
+  );
+
+  const a =
+    Math.sin(latitudeDifference / 2) ** 2 +
+    Math.cos(toRadians(latitude1)) *
+      Math.cos(toRadians(latitude2)) *
+      Math.sin(longitudeDifference / 2) ** 2;
+
+  return 2 * radius * Math.asin(Math.sqrt(a));
+}
+
 export default function MapaPage() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [selected, setSelected] = useState<Property | null>(
@@ -28,6 +65,13 @@ export default function MapaPage() {
   const [loading, setLoading] = useState(true);
   const [mobileListOpen, setMobileListOpen] =
     useState(false);
+  const [userLocation, setUserLocation] =
+    useState<UserLocation | null>(null);
+  const [locationMessage, setLocationMessage] =
+    useState("");
+  const [locating, setLocating] = useState(false);
+  const [nearbyOnly, setNearbyOnly] = useState(false);
+  const [nearbyRadius, setNearbyRadius] = useState(10);
 
   useEffect(() => {
     loadProperties();
@@ -61,24 +105,65 @@ export default function MapaPage() {
   const filteredProperties = useMemo(() => {
     const normalized = query.trim().toLowerCase();
 
-    return properties.filter((property) => {
-      const matchesQuery =
-        !normalized ||
-        property.title.toLowerCase().includes(normalized) ||
-        property.zone.toLowerCase().includes(normalized);
+    const rows: PropertyWithDistance[] = properties
+      .map((property) => {
+        if (!userLocation) return property;
 
-      const matchesOperation =
-        !operation || property.operation === operation;
+        return {
+          ...property,
+          distanceKm: distanceInKm(
+            userLocation.latitude,
+            userLocation.longitude,
+            Number(property.latitude),
+            Number(property.longitude),
+          ),
+        };
+      })
+      .filter((property) => {
+        const matchesQuery =
+          !normalized ||
+          property.title.toLowerCase().includes(normalized) ||
+          property.zone.toLowerCase().includes(normalized);
 
-      const matchesType =
-        !propertyType ||
-        property.property_type === propertyType;
+        const matchesOperation =
+          !operation ||
+          property.operation === operation;
 
-      return (
-        matchesQuery && matchesOperation && matchesType
+        const matchesType =
+          !propertyType ||
+          property.property_type === propertyType;
+
+        const matchesDistance =
+          !nearbyOnly ||
+          (property.distanceKm !== undefined &&
+            property.distanceKm <= nearbyRadius);
+
+        return (
+          matchesQuery &&
+          matchesOperation &&
+          matchesType &&
+          matchesDistance
+        );
+      });
+
+    if (userLocation) {
+      rows.sort(
+        (a, b) =>
+          (a.distanceKm ?? Number.MAX_VALUE) -
+          (b.distanceKm ?? Number.MAX_VALUE),
       );
-    });
-  }, [properties, query, operation, propertyType]);
+    }
+
+    return rows;
+  }, [
+    properties,
+    query,
+    operation,
+    propertyType,
+    userLocation,
+    nearbyOnly,
+    nearbyRadius,
+  ]);
 
   useEffect(() => {
     if (
@@ -100,6 +185,58 @@ export default function MapaPage() {
     },
     [],
   );
+
+  function locateUser(enableNearby = false) {
+    if (!navigator.geolocation) {
+      setLocationMessage(
+        "Este navegador no admite ubicación.",
+      );
+      return;
+    }
+
+    setLocating(true);
+    setLocationMessage("");
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const location = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        };
+
+        setUserLocation(location);
+        setLocating(false);
+        setLocationMessage(
+          `Ubicación detectada con una precisión aproximada de ${Math.round(
+            position.coords.accuracy,
+          )} metros.`,
+        );
+
+        if (enableNearby) {
+          setNearbyOnly(true);
+        }
+      },
+      (error) => {
+        setLocating(false);
+
+        const messages: Record<number, string> = {
+          1: "Debes permitir el acceso a tu ubicación.",
+          2: "No se pudo determinar tu ubicación.",
+          3: "La solicitud de ubicación tardó demasiado.",
+        };
+
+        setLocationMessage(
+          messages[error.code] ||
+            "No se pudo obtener tu ubicación.",
+        );
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 60000,
+      },
+    );
+  }
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
@@ -133,7 +270,7 @@ export default function MapaPage() {
           </a>
         </div>
 
-        <div className="mx-auto grid max-w-[1600px] gap-3 px-5 pb-4 md:grid-cols-[minmax(260px,1fr)_190px_190px_auto]">
+        <div className="mx-auto grid max-w-[1600px] gap-3 px-5 pb-4 md:grid-cols-2 xl:grid-cols-[minmax(260px,1fr)_180px_180px_auto_auto]">
           <label className="relative">
             <Search
               size={18}
@@ -178,6 +315,36 @@ export default function MapaPage() {
 
           <button
             type="button"
+            onClick={() => locateUser(false)}
+            disabled={locating}
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-5 font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-60"
+          >
+            <LocateFixed size={18} />
+            {locating ? "Ubicando..." : "Mi ubicación"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (!userLocation) {
+                locateUser(true);
+                return;
+              }
+
+              setNearbyOnly((value) => !value);
+            }}
+            className={`inline-flex h-12 items-center justify-center gap-2 rounded-xl px-5 font-bold ${
+              nearbyOnly
+                ? "bg-emerald-600 text-white"
+                : "bg-slate-950 text-white"
+            }`}
+          >
+            <Crosshair size={18} />
+            {nearbyOnly ? "Mostrando cercanos" : "Cerca de mí"}
+          </button>
+
+          <button
+            type="button"
             onClick={() =>
               setMobileListOpen((value) => !value)
             }
@@ -187,6 +354,37 @@ export default function MapaPage() {
             Ver lista
           </button>
         </div>
+
+        {(userLocation || locationMessage) && (
+          <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-3 px-5 pb-4">
+            {userLocation && (
+              <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold">
+                Radio:
+                <select
+                  value={nearbyRadius}
+                  onChange={(event) =>
+                    setNearbyRadius(
+                      Number(event.target.value),
+                    )
+                  }
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5"
+                >
+                  <option value={2}>2 km</option>
+                  <option value={5}>5 km</option>
+                  <option value={10}>10 km</option>
+                  <option value={20}>20 km</option>
+                  <option value={50}>50 km</option>
+                </select>
+              </label>
+            )}
+
+            {locationMessage && (
+              <p className="text-sm font-medium text-slate-600">
+                {locationMessage}
+              </p>
+            )}
+          </div>
+        )}
       </header>
 
       <div className="mx-auto grid max-w-[1600px] lg:h-[calc(100vh-157px)] lg:grid-cols-[420px_1fr]">
@@ -226,6 +424,9 @@ export default function MapaPage() {
 
                 const active =
                   selected?.id === property.id;
+                const distance =
+                  (property as PropertyWithDistance)
+                    .distanceKm;
 
                 return (
                   <button
@@ -263,6 +464,12 @@ export default function MapaPage() {
                           {formatPrice(property)}
                         </p>
 
+                        {distance !== undefined && (
+                          <p className="mt-1 text-xs font-bold text-blue-700">
+                            A {distance.toFixed(1)} km de ti
+                          </p>
+                        )}
+
                         <div className="mt-3 flex flex-wrap gap-3 text-xs font-semibold text-slate-500">
                           <span className="flex items-center gap-1">
                             <BedDouble size={14} />
@@ -291,6 +498,7 @@ export default function MapaPage() {
             properties={filteredProperties}
             selectedId={selected?.id || null}
             onSelect={handleSelect}
+            userLocation={userLocation}
           />
 
           {selected && (

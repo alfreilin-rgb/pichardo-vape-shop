@@ -11,10 +11,16 @@ import type { Property } from "../lib/puntahogar";
 
 import "maplibre-gl/dist/maplibre-gl.css";
 
+type UserLocation = {
+  latitude: number;
+  longitude: number;
+};
+
 type PropertiesMapProps = {
   properties: Property[];
   selectedId: number | null;
   onSelect: (property: Property) => void;
+  userLocation?: UserLocation | null;
 };
 
 const DEFAULT_CENTER: [number, number] = [
@@ -43,12 +49,14 @@ export default function PropertiesMap({
   properties,
   selectedId,
   onSelect,
+  userLocation = null,
 }: PropertiesMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map | null>(null);
   const markersRef = useRef<Map<number, Marker>>(
     new globalThis.Map(),
   );
+  const userMarkerRef = useRef<Marker | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -101,6 +109,8 @@ export default function PropertiesMap({
         marker.remove(),
       );
       markersRef.current.clear();
+      userMarkerRef.current?.remove();
+      userMarkerRef.current = null;
       map.remove();
       mapRef.current = null;
     };
@@ -229,6 +239,32 @@ export default function PropertiesMap({
   }, [properties, onSelect]);
 
   useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    userMarkerRef.current?.remove();
+    userMarkerRef.current = null;
+
+    if (!userLocation) return;
+
+    const element = document.createElement("div");
+    element.className = "puntahogar-user-marker";
+    element.innerHTML = '<span></span>';
+
+    const marker = new Marker({
+      element,
+      anchor: "center",
+    })
+      .setLngLat([
+        userLocation.longitude,
+        userLocation.latitude,
+      ])
+      .addTo(map);
+
+    userMarkerRef.current = marker;
+  }, [userLocation]);
+
+  useEffect(() => {
     if (!selectedId || !mapRef.current) return;
 
     const property = properties.find(
@@ -279,6 +315,36 @@ export default function PropertiesMap({
         .puntahogar-price-marker:hover {
           background: #047857;
           transform: translateY(-2px) scale(1.05);
+        }
+
+        .puntahogar-user-marker {
+          position: relative;
+          width: 24px;
+          height: 24px;
+          border: 4px solid white;
+          border-radius: 9999px;
+          background: #2563eb;
+          box-shadow: 0 0 0 8px rgba(37, 99, 235, 0.18);
+        }
+
+        .puntahogar-user-marker::after {
+          content: "";
+          position: absolute;
+          inset: -10px;
+          border: 2px solid rgba(37, 99, 235, 0.35);
+          border-radius: 9999px;
+          animation: puntahogar-pulse 1.8s ease-out infinite;
+        }
+
+        @keyframes puntahogar-pulse {
+          0% {
+            transform: scale(0.7);
+            opacity: 0.9;
+          }
+          100% {
+            transform: scale(1.8);
+            opacity: 0;
+          }
         }
 
         .maplibregl-popup-content {
