@@ -31,64 +31,79 @@ export default function PropertyLocationMap({
   const markerRef = useRef<Marker | null>(null);
 
   const [latitude, setLatitude] = useState(initialLatitude);
-  const [longitude, setLongitude] = useState(initialLongitude);
+  const [longitude, setLongitude] =
+    useState(initialLongitude);
 
   useEffect(() => {
-    if (!mapContainer.current || mapRef.current) {
-      return;
-    }
+    if (!mapContainer.current || mapRef.current) return;
 
     const map = new Map({
       container: mapContainer.current,
-
       style: {
         version: 8,
         sources: {
-          "openstreetmap-tiles": {
+          "carto-light": {
             type: "raster",
             tiles: [
-              "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+              "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+              "https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+              "https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
             ],
             tileSize: 256,
-            attribution: "© OpenStreetMap contributors",
+            attribution:
+              "© OpenStreetMap contributors © CARTO",
           },
         },
         layers: [
           {
-            id: "openstreetmap-layer",
+            id: "carto-light-layer",
             type: "raster",
-            source: "openstreetmap-tiles",
+            source: "carto-light",
             minzoom: 0,
-            maxzoom: 19,
+            maxzoom: 20,
           },
         ],
       },
-
       center: [initialLongitude, initialLatitude],
-      zoom: 14,
+      zoom: readOnly ? 15 : 13,
+      minZoom: 8,
+      maxZoom: 19,
     });
 
-    map.addControl(new NavigationControl(), "top-right");
+    map.addControl(
+      new NavigationControl(),
+      "top-right",
+    );
+
+    const markerElement = document.createElement("div");
+    markerElement.className =
+      "h-8 w-8 rounded-full border-4 border-white bg-emerald-600 shadow-xl";
 
     const marker = new Marker({
+      element: markerElement,
       draggable: !readOnly,
+      anchor: "center",
     })
       .setLngLat([initialLongitude, initialLatitude])
       .addTo(map);
 
+    function updatePosition(lat: number, lng: number) {
+      marker.setLngLat([lng, lat]);
+      setLatitude(lat);
+      setLongitude(lng);
+    }
+
     if (!readOnly) {
       marker.on("dragend", () => {
         const position = marker.getLngLat();
-
-        setLatitude(position.lat);
-        setLongitude(position.lng);
+        updatePosition(position.lat, position.lng);
       });
 
       map.on("click", (event: MapMouseEvent) => {
-        marker.setLngLat(event.lngLat);
-
-        setLatitude(event.lngLat.lat);
-        setLongitude(event.lngLat.lng);
+        updatePosition(
+          event.lngLat.lat,
+          event.lngLat.lng,
+        );
       });
     }
 
@@ -98,16 +113,13 @@ export default function PropertyLocationMap({
     return () => {
       marker.remove();
       map.remove();
-
       markerRef.current = null;
       mapRef.current = null;
     };
   }, [initialLatitude, initialLongitude, readOnly]);
 
   useEffect(() => {
-    if (!mapRef.current || !markerRef.current) {
-      return;
-    }
+    if (!mapRef.current || !markerRef.current) return;
 
     markerRef.current.setLngLat([
       initialLongitude,
@@ -116,12 +128,13 @@ export default function PropertyLocationMap({
 
     mapRef.current.flyTo({
       center: [initialLongitude, initialLatitude],
-      zoom: 14,
+      zoom: readOnly ? 15 : 13,
+      duration: 800,
     });
 
     setLatitude(initialLatitude);
     setLongitude(initialLongitude);
-  }, [initialLatitude, initialLongitude]);
+  }, [initialLatitude, initialLongitude, readOnly]);
 
   const displayedLatitude =
     locationType === "aproximada"
@@ -134,17 +147,17 @@ export default function PropertyLocationMap({
       : longitude;
 
   return (
-    <div>
+    <div className="text-slate-900">
       {!readOnly && (
-        <div className="mb-4 rounded-xl bg-blue-50 p-4 text-sm text-blue-900">
-          Arrastra el marcador o haz clic sobre el mapa para seleccionar la
-          ubicación.
+        <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-900">
+          Arrastra el marcador verde o toca el mapa para
+          seleccionar la ubicación.
         </div>
       )}
 
       <div
         ref={mapContainer}
-        className="h-[420px] w-full overflow-hidden rounded-2xl border border-slate-300"
+        className="h-[460px] w-full overflow-hidden rounded-3xl border border-slate-200 shadow-sm"
       />
 
       {!readOnly && (
@@ -155,7 +168,6 @@ export default function PropertyLocationMap({
             value={displayedLatitude}
             readOnly
           />
-
           <input
             type="hidden"
             name="longitude"
@@ -165,24 +177,34 @@ export default function PropertyLocationMap({
         </>
       )}
 
-      <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
-        <div className="rounded-xl bg-slate-100 p-3">
-          <span className="font-semibold">Latitud:</span>{" "}
-          {displayedLatitude}
-        </div>
+      {!readOnly && (
+        <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <span className="font-bold">Latitud:</span>{" "}
+            {displayedLatitude}
+          </div>
 
-        <div className="rounded-xl bg-slate-100 p-3">
-          <span className="font-semibold">Longitud:</span>{" "}
-          {displayedLongitude}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <span className="font-bold">Longitud:</span>{" "}
+            {displayedLongitude}
+          </div>
         </div>
-      </div>
+      )}
 
       {locationType === "aproximada" && (
         <p className="mt-3 text-sm text-slate-500">
-          La ubicación se guardará de manera aproximada para proteger la
-          privacidad del propietario.
+          La ubicación se guarda de manera aproximada para
+          proteger la privacidad del propietario.
         </p>
       )}
+
+      <style jsx global>{`
+        .maplibregl-ctrl-group {
+          overflow: hidden;
+          border-radius: 14px;
+          box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+        }
+      `}</style>
     </div>
   );
 }

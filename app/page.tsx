@@ -1,117 +1,185 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Categories from "@/components/home/Categories";
+import Hero, {
+  HomeFilters,
+} from "@/components/home/Hero";
+import Stats from "@/components/home/Stats";
+import Footer from "@/components/layout/Footer";
+import Header from "@/components/layout/Header";
+import PropertyCard from "@/components/property/PropertyCard";
+import PropertySkeleton from "@/components/property/PropertySkeleton";
 import { supabase } from "./lib/supabase/client";
 import {
-  formatPrice,
   getDeviceToken,
   Property,
 } from "./lib/puntahogar";
 
-type SearchFilters = {
-  operation: string;
-  zone: string;
-  propertyType: string;
-  priceRange: string;
-};
-
-const emptyFilters: SearchFilters = {
+const initialFilters: HomeFilters = {
+  query: "",
   operation: "",
-  zone: "",
   propertyType: "",
-  priceRange: "",
+  bedrooms: "",
+  maxPrice: "",
 };
 
 export default function Home() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchFilters, setSearchFilters] =
-    useState<SearchFilters>(emptyFilters);
+  const [filters, setFilters] =
+    useState<HomeFilters>(initialFilters);
   const [appliedFilters, setAppliedFilters] =
-    useState<SearchFilters>(emptyFilters);
+    useState<HomeFilters>(initialFilters);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadPage();
+    loadHome();
   }, []);
 
-  async function loadPage() {
+  async function loadHome() {
     setLoading(true);
-    const deviceToken = getDeviceToken();
 
-    const [propertyResult, favoriteResult] = await Promise.all([
-      supabase
-        .from("properties")
-        .select("*")
-        .eq("status", "Aprobada")
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("favorites")
-        .select("property_id")
-        .eq("device_token", deviceToken),
-    ]);
+    const propertyResult = await supabase
+      .from("properties")
+      .select("*")
+      .eq("status", "Aprobada")
+      .order("created_at", { ascending: false });
 
     if (propertyResult.error) {
-      console.error(propertyResult.error);
+      console.error(
+        "No se pudieron cargar las propiedades:",
+        propertyResult.error,
+      );
     } else {
-      setProperties((propertyResult.data || []) as Property[]);
+      setProperties(
+        (propertyResult.data || []) as Property[],
+      );
     }
 
-    if (favoriteResult.error) {
-      console.error(favoriteResult.error);
-    } else {
-      setFavoriteIds(
-        (favoriteResult.data || []).map(
-          (item) => Number(item.property_id),
-        ),
-      );
+    try {
+      const deviceToken = getDeviceToken();
+      const favoriteResult = await supabase
+        .from("favorites")
+        .select("property_id")
+        .eq("device_token", deviceToken);
+
+      if (!favoriteResult.error) {
+        setFavoriteIds(
+          (favoriteResult.data || []).map((item) =>
+            Number(item.property_id),
+          ),
+        );
+      } else {
+        console.warn(
+          "Favoritos no disponibles:",
+          favoriteResult.error.message,
+        );
+      }
+    } catch (error) {
+      console.warn("No se pudieron cargar favoritos.", error);
     }
 
     setLoading(false);
   }
 
   const filteredProperties = useMemo(() => {
+    const normalizedQuery = appliedFilters.query
+      .trim()
+      .toLowerCase();
+
     return properties.filter((property) => {
       const price = Number(property.price) || 0;
 
-      if (
-        appliedFilters.operation &&
-        property.operation !== appliedFilters.operation
-      ) return false;
+      const matchesQuery =
+        !normalizedQuery ||
+        property.title
+          .toLowerCase()
+          .includes(normalizedQuery) ||
+        property.zone
+          .toLowerCase()
+          .includes(normalizedQuery) ||
+        (property.reference || "")
+          .toLowerCase()
+          .includes(normalizedQuery);
 
-      if (
-        appliedFilters.zone &&
-        property.zone !== appliedFilters.zone
-      ) return false;
+      const matchesOperation =
+        !appliedFilters.operation ||
+        property.operation === appliedFilters.operation;
 
-      if (
-        appliedFilters.propertyType &&
-        property.property_type !== appliedFilters.propertyType
-      ) return false;
+      const matchesType =
+        !appliedFilters.propertyType ||
+        property.property_type ===
+          appliedFilters.propertyType;
 
-      if (
-        appliedFilters.priceRange === "20000" &&
-        price > 20000
-      ) return false;
+      const matchesBedrooms =
+        !appliedFilters.bedrooms ||
+        Number(property.bedrooms) >=
+          Number(appliedFilters.bedrooms);
 
-      if (
-        appliedFilters.priceRange === "35000" &&
-        price > 35000
-      ) return false;
+      const matchesPrice =
+        !appliedFilters.maxPrice ||
+        price <= Number(appliedFilters.maxPrice);
 
-      if (
-        appliedFilters.priceRange === "50000" &&
-        price > 50000
-      ) return false;
-
-      if (
-        appliedFilters.priceRange === "more-than-50000" &&
-        price <= 50000
-      ) return false;
-
-      return true;
+      return (
+        matchesQuery &&
+        matchesOperation &&
+        matchesType &&
+        matchesBedrooms &&
+        matchesPrice
+      );
     });
   }, [properties, appliedFilters]);
+
+  const stats = useMemo(() => {
+    return {
+      properties: properties.length,
+      views: properties.reduce(
+        (total, property) =>
+          total + Number(property.views || 0),
+        0,
+      ),
+      whatsappClicks: properties.reduce(
+        (total, property) =>
+          total + Number(property.whatsapp_clicks || 0),
+        0,
+      ),
+      zones: new Set(
+        properties
+          .map((property) => property.zone)
+          .filter(Boolean),
+      ).size,
+    };
+  }, [properties]);
+
+  function search() {
+    setAppliedFilters(filters);
+
+    setTimeout(() => {
+      document
+        .getElementById("propiedades")
+        ?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+    }, 50);
+  }
+
+  function selectCategory(category: string) {
+    const next = {
+      ...filters,
+      propertyType: category,
+    };
+
+    setFilters(next);
+    setAppliedFilters(next);
+
+    setTimeout(() => {
+      document
+        .getElementById("propiedades")
+        ?.scrollIntoView({ behavior: "smooth" });
+    }, 50);
+  }
 
   async function toggleFavorite(propertyId: number) {
     const deviceToken = getDeviceToken();
@@ -132,13 +200,23 @@ export default function Home() {
       return;
     }
 
-    const { error } = await supabase.from("favorites").insert({
-      device_token: deviceToken,
-      property_id: propertyId,
-    });
+    const { error } = await supabase
+      .from("favorites")
+      .insert({
+        device_token: deviceToken,
+        property_id: propertyId,
+      });
 
     if (!error) {
-      setFavoriteIds((current) => [...current, propertyId]);
+      setFavoriteIds((current) => [
+        ...current,
+        propertyId,
+      ]);
+    } else {
+      console.warn(
+        "No se pudo guardar el favorito:",
+        error.message,
+      );
     }
   }
 
@@ -146,15 +224,19 @@ export default function Home() {
     await supabase
       .from("properties")
       .update({
-        whatsapp_clicks: (property.whatsapp_clicks || 0) + 1,
+        whatsapp_clicks:
+          Number(property.whatsapp_clicks || 0) + 1,
       })
       .eq("id", property.id);
 
     let number = property.whatsapp.replace(/\D/g, "");
-    if (number.length === 10) number = `1${number}`;
+
+    if (number.length === 10) {
+      number = `1${number}`;
+    }
 
     const message = encodeURIComponent(
-      `Hola, estoy interesado en la propiedad: ${property.title}, ubicada en ${property.zone}.`,
+      `Hola, estoy interesado en la propiedad "${property.title}" ubicada en ${property.zone}.`,
     );
 
     window.open(
@@ -164,243 +246,123 @@ export default function Home() {
     );
   }
 
-  function search() {
-    setAppliedFilters(searchFilters);
-    setTimeout(() => {
-      document
-        .getElementById("propiedades")
-        ?.scrollIntoView({ behavior: "smooth" });
-    }, 50);
-  }
-
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="border-b bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
-          <a href="/">
-            <h1 className="text-2xl font-bold text-blue-700">PuntaHogar</h1>
-            <p className="text-xs text-slate-500">
-              Verón, Bávaro y Punta Cana
-            </p>
-          </a>
+      <Header favoriteCount={favoriteIds.length} />
 
-          <nav className="flex flex-wrap items-center justify-end gap-3">
-            <a href="/favoritos" className="font-medium hover:text-blue-700">
-              Favoritos ({favoriteIds.length})
-            </a>
-            <a href="/mapa" className="font-medium hover:text-blue-700">
-              Mapa
-            </a>
-            <a href="/mis-propiedades" className="font-medium hover:text-blue-700">
-              Mis propiedades
-            </a>
-            <a href="/admin" className="font-medium hover:text-blue-700">
-              Administrar
-            </a>
-            <a
-              href="/publicar"
-              className="rounded-xl bg-blue-700 px-4 py-3 font-semibold text-white"
-            >
-              Publicar gratis
-            </a>
-          </nav>
-        </div>
-      </header>
+      <Hero
+        filters={filters}
+        onChange={setFilters}
+        onSearch={search}
+        propertyCount={properties.length}
+      />
 
-      <section className="bg-gradient-to-br from-blue-900 via-blue-800 to-cyan-600 px-5 py-20 text-white">
+      <Categories
+        selected={filters.propertyType}
+        onSelect={selectCategory}
+      />
+
+      <Stats {...stats} />
+
+      <section
+        id="propiedades"
+        className="scroll-mt-24 px-5 py-16 md:py-20"
+      >
         <div className="mx-auto max-w-7xl">
-          <p className="font-semibold uppercase tracking-widest text-cyan-200">
-            Propiedades en Punta Cana
-          </p>
-          <h2 className="mt-3 max-w-4xl text-4xl font-bold md:text-6xl">
-            Encuentra tu próximo hogar en el Caribe
-          </h2>
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+            <div>
+              <p className="font-bold uppercase tracking-widest text-emerald-700">
+                Explora Punta Cana
+              </p>
+              <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950 md:text-4xl">
+                Propiedades disponibles
+              </h2>
+              <p className="mt-3 text-slate-600">
+                {loading
+                  ? "Buscando propiedades..."
+                  : `${filteredProperties.length} resultado(s) encontrado(s)`}
+              </p>
+            </div>
 
-          <div className="mt-9 rounded-2xl bg-white p-4 text-slate-900 shadow-xl">
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
-              <select
-                value={searchFilters.operation}
-                onChange={(event) =>
-                  setSearchFilters({
-                    ...searchFilters,
-                    operation: event.target.value,
-                  })
-                }
-                className="rounded-xl border px-4 py-3"
-              >
-                <option value="">Alquiler o venta</option>
-                <option value="Alquiler">Alquiler</option>
-                <option value="Venta">Venta</option>
-              </select>
-
-              <select
-                value={searchFilters.zone}
-                onChange={(event) =>
-                  setSearchFilters({
-                    ...searchFilters,
-                    zone: event.target.value,
-                  })
-                }
-                className="rounded-xl border px-4 py-3"
-              >
-                <option value="">Todas las zonas</option>
-                {[
-                  "Verón",
-                  "Bávaro",
-                  "Pueblo Bávaro",
-                  "Friusa",
-                  "Downtown Punta Cana",
-                  "Punta Cana Village",
-                ].map((zone) => (
-                  <option key={zone}>{zone}</option>
-                ))}
-              </select>
-
-              <select
-                value={searchFilters.propertyType}
-                onChange={(event) =>
-                  setSearchFilters({
-                    ...searchFilters,
-                    propertyType: event.target.value,
-                  })
-                }
-                className="rounded-xl border px-4 py-3"
-              >
-                <option value="">Tipo de propiedad</option>
-                {["Apartamento", "Casa", "Villa", "Penthouse", "Solar"].map(
-                  (type) => (
-                    <option key={type}>{type}</option>
-                  ),
-                )}
-              </select>
-
-              <select
-                value={searchFilters.priceRange}
-                onChange={(event) =>
-                  setSearchFilters({
-                    ...searchFilters,
-                    priceRange: event.target.value,
-                  })
-                }
-                className="rounded-xl border px-4 py-3"
-              >
-                <option value="">Cualquier precio</option>
-                <option value="20000">Hasta RD$20,000</option>
-                <option value="35000">Hasta RD$35,000</option>
-                <option value="50000">Hasta RD$50,000</option>
-                <option value="more-than-50000">Más de RD$50,000</option>
-              </select>
-
+            {JSON.stringify(appliedFilters) !==
+              JSON.stringify(initialFilters) && (
               <button
                 type="button"
-                onClick={search}
-                className="rounded-xl bg-blue-700 px-5 py-3 font-semibold text-white"
+                onClick={() => {
+                  setFilters(initialFilters);
+                  setAppliedFilters(initialFilters);
+                }}
+                className="w-fit rounded-xl border border-slate-300 bg-white px-4 py-3 font-semibold text-slate-700 hover:bg-slate-100"
               >
-                Buscar
+                Limpiar filtros
               </button>
-            </div>
+            )}
           </div>
-        </div>
-      </section>
 
-      <section id="propiedades" className="px-5 py-16">
-        <div className="mx-auto max-w-7xl">
-          <h2 className="text-3xl font-bold">
-            Propiedades disponibles
-          </h2>
-          <p className="mt-2 text-slate-600">
-            {loading
-              ? "Cargando propiedades..."
-              : `${filteredProperties.length} propiedades encontradas.`}
-          </p>
-
-          {!loading && filteredProperties.length === 0 ? (
-            <div className="mt-8 rounded-2xl bg-white p-10 text-center shadow-sm">
-              No hay propiedades aprobadas que coincidan con la búsqueda.
+          {loading ? (
+            <div className="mt-10 grid gap-7 md:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <PropertySkeleton key={index} />
+              ))}
+            </div>
+          ) : filteredProperties.length > 0 ? (
+            <div className="mt-10 grid gap-7 md:grid-cols-2 xl:grid-cols-3">
+              {filteredProperties.map((property) => (
+                <PropertyCard
+                  key={property.id}
+                  property={property}
+                  favorite={favoriteIds.includes(
+                    property.id,
+                  )}
+                  onFavorite={toggleFavorite}
+                  onWhatsApp={openWhatsApp}
+                />
+              ))}
             </div>
           ) : (
-            <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {filteredProperties.map((property) => {
-                const favorite = favoriteIds.includes(property.id);
-
-                return (
-                  <article
-                    key={property.id}
-                    className="overflow-hidden rounded-2xl bg-white shadow-sm"
-                  >
-                    <div className="relative h-52 bg-slate-200">
-                      {property.images?.[0] ? (
-                        <img
-                          src={property.images[0]}
-                          alt={property.title}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-full items-center justify-center">
-                          Sin fotografía
-                        </div>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => toggleFavorite(property.id)}
-                        className={`absolute right-3 top-3 h-11 w-11 rounded-full text-xl ${
-                          favorite
-                            ? "bg-red-500 text-white"
-                            : "bg-white"
-                        }`}
-                      >
-                        {favorite ? "♥" : "♡"}
-                      </button>
-                    </div>
-
-                    <div className="p-5">
-                      <div className="flex gap-2 text-sm">
-                        <span className="rounded-full bg-blue-100 px-3 py-1 text-blue-700">
-                          {property.operation}
-                        </span>
-                        <span className="rounded-full bg-slate-100 px-3 py-1">
-                          {property.property_type}
-                        </span>
-                      </div>
-
-                      <h3 className="mt-4 text-xl font-bold">
-                        {property.title}
-                      </h3>
-                      <p className="mt-2 text-slate-500">{property.zone}</p>
-                      <p className="mt-4 text-2xl font-bold text-blue-700">
-                        {formatPrice(property)}
-                      </p>
-
-                      <div className="mt-4 flex flex-wrap gap-3 text-sm text-slate-600">
-                        <span>🛏️ {property.bedrooms}</span>
-                        <span>🚿 {property.bathrooms}</span>
-                        <span>🚗 {property.parking}</span>
-                      </div>
-
-                      <div className="mt-5 grid gap-3">
-                        <button
-                          type="button"
-                          onClick={() => openWhatsApp(property)}
-                          className="rounded-xl bg-green-600 px-4 py-3 font-semibold text-white"
-                        >
-                          Contactar por WhatsApp
-                        </button>
-                        <a
-                          href={`/propiedad/${property.id}`}
-                          className="rounded-xl bg-slate-900 px-4 py-3 text-center font-semibold text-white"
-                        >
-                          Ver propiedad
-                        </a>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
+            <div className="mt-10 rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
+              <h3 className="text-2xl font-black text-slate-950">
+                No encontramos propiedades
+              </h3>
+              <p className="mt-3 text-slate-600">
+                Prueba con otros filtros o limpia la búsqueda.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setFilters(initialFilters);
+                  setAppliedFilters(initialFilters);
+                }}
+                className="mt-6 rounded-xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700"
+              >
+                Ver todas
+              </button>
             </div>
           )}
         </div>
       </section>
+
+      <section className="px-5 pb-16">
+        <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-8 overflow-hidden rounded-3xl bg-emerald-600 p-8 text-white md:flex-row md:items-center md:p-12">
+          <div>
+            <p className="font-bold uppercase tracking-widest text-emerald-100">
+              ¿Tienes una propiedad?
+            </p>
+            <h2 className="mt-2 max-w-2xl text-3xl font-black md:text-4xl">
+              Publica gratis y conecta con personas interesadas.
+            </h2>
+          </div>
+
+          <a
+            href="/publicar"
+            className="min-w-fit rounded-2xl bg-white px-6 py-4 font-black text-emerald-700 shadow-sm transition hover:bg-emerald-50"
+          >
+            Publicar propiedad
+          </a>
+        </div>
+      </section>
+
+      <Footer />
     </main>
   );
 }
