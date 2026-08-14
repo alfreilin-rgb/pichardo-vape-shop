@@ -36,7 +36,7 @@ export default function AdminLoginPage() {
   }
 
   async function handleSubmit(
-    event: FormEvent<HTMLFormElement>,
+    event: FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
 
@@ -54,8 +54,9 @@ export default function AdminLoginPage() {
     if (error || !data.user) {
       setErrorMessage(
         error?.message ||
-          "No se pudo iniciar sesión.",
+          "No se pudo iniciar sesión."
       );
+
       setSubmitting(false);
       return;
     }
@@ -71,7 +72,7 @@ export default function AdminLoginPage() {
       await supabase.auth.signOut();
 
       setErrorMessage(
-        "Esta cuenta existe, pero no tiene permisos de administrador.",
+        "Esta cuenta existe, pero no tiene permisos de administrador."
       );
 
       setSubmitting(false);
@@ -83,39 +84,57 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-10 text-slate-900">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 shadow-sm md:p-10">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#080808] px-4 py-10 text-white">
+
+      {/* FONDOS DECORATIVOS */}
+      <div className="absolute -left-32 top-10 h-80 w-80 rounded-full bg-red-600/20 blur-[120px]" />
+
+      <div className="absolute -right-32 bottom-10 h-80 w-80 rounded-full bg-red-900/20 blur-[120px]" />
+
+      <div className="relative w-full max-w-md rounded-3xl border border-red-500/20 bg-[#111111] p-7 shadow-2xl md:p-10">
+
+        {/* VOLVER */}
         <a
           href="/"
-          className="font-medium text-blue-700 hover:underline"
+          className="text-sm font-bold text-zinc-400 transition hover:text-red-500"
         >
-          ← Volver al inicio
+          ← Volver a la tienda
         </a>
 
+        {/* LOGO */}
         <div className="mt-8 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-100 text-3xl">
-            🔐
-          </div>
 
-          <p className="mt-6 text-sm font-semibold uppercase tracking-widest text-blue-700">
-            PuntaHogar
+          <img
+            src="/logo-pichardo.png"
+            alt="Pichardo Vape Shop"
+            className="mx-auto h-28 w-28 object-contain"
+          />
+
+          <p className="mt-5 text-sm font-black uppercase tracking-[0.25em] text-red-500">
+            Pichardo Vape Shop
           </p>
 
-          <h1 className="mt-2 text-3xl font-bold">
+          <h1 className="mt-3 text-3xl font-black">
             Acceso administrativo
           </h1>
 
-          <p className="mt-3 text-slate-600">
-            Inicia sesión con la cuenta autorizada en Supabase.
+          <p className="mt-3 text-sm leading-6 text-zinc-500">
+            Inicia sesión con la cuenta autorizada para administrar productos,
+            marcas e inventario.
           </p>
+
         </div>
 
+        {/* FORMULARIO */}
         <form
           onSubmit={handleSubmit}
           className="mt-8 space-y-5"
         >
+
+          {/* EMAIL */}
           <label className="block">
-            <span className="mb-2 block font-medium">
+
+            <span className="mb-2 block text-sm font-bold">
               Correo electrónico
             </span>
 
@@ -128,17 +147,21 @@ export default function AdminLoginPage() {
               }}
               required
               autoComplete="email"
-              placeholder="admin@puntahogar.com"
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-600"
+              placeholder="Tu correo"
+              className="w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-white outline-none transition placeholder:text-zinc-600 focus:border-red-500"
             />
+
           </label>
 
+          {/* PASSWORD */}
           <label className="block">
-            <span className="mb-2 block font-medium">
+
+            <span className="mb-2 block text-sm font-bold">
               Contraseña
             </span>
 
             <div className="flex gap-2">
+
               <input
                 type={
                   showPassword
@@ -153,38 +176,54 @@ export default function AdminLoginPage() {
                 required
                 autoComplete="current-password"
                 placeholder="Tu contraseña"
-                className="min-w-0 flex-1 rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-600"
+                className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black px-4 py-3 text-white outline-none transition placeholder:text-zinc-600 focus:border-red-500"
               />
 
               <button
                 type="button"
                 onClick={() =>
-                  setShowPassword((current) => !current)
+                  setShowPassword(
+                    (current) => !current
+                  )
                 }
-                className="rounded-xl border border-slate-300 px-4 py-3 font-medium hover:bg-slate-50"
+                className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-bold transition hover:border-red-500"
               >
-                {showPassword ? "Ocultar" : "Ver"}
+                {showPassword
+                  ? "Ocultar"
+                  : "Ver"}
               </button>
+
             </div>
+
           </label>
 
+          {/* ERROR */}
           {errorMessage && (
-            <p className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+            <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-400">
               {errorMessage}
-            </p>
+            </div>
           )}
 
+          {/* BOTÓN */}
           <button
             type="submit"
             disabled={submitting}
-            className="w-full rounded-xl bg-blue-700 px-5 py-4 text-lg font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+            className="w-full rounded-xl bg-red-600 px-5 py-4 text-lg font-black text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
           >
             {submitting
               ? "Verificando..."
               : "Entrar al panel"}
           </button>
+
         </form>
+
+        {/* PIE */}
+        <p className="mt-7 text-center text-xs text-zinc-600">
+          Pichardo Vape Shop · El papá de los precios
+        </p>
+
       </div>
+
     </main>
   );
 }
