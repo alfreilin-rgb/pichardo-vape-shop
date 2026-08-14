@@ -315,6 +315,9 @@ export default function Home() {
     setErrorMessage,
   ] = useState("");
 
+  const [searchInput, setSearchInput] =
+    useState("");
+
   const [search, setSearch] =
     useState("");
 
@@ -331,6 +334,34 @@ export default function Home() {
     currentPage,
     setCurrentPage,
   ] = useState(1);
+
+  function handleSearchSubmit() {
+    setSearch(searchInput.trim());
+    setCurrentPage(1);
+
+    setTimeout(() => {
+      document
+        .getElementById("catalogo-completo")
+        ?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+    }, 100);
+  }
+
+  function handleCategorySelect(categoryName: string) {
+    setCategory(categoryName);
+    setCurrentPage(1);
+
+    setTimeout(() => {
+      document
+        .getElementById("catalogo-completo")
+        ?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+    }, 100);
+  }
 
   /* ================================
      CARGAR PRODUCTOS
@@ -634,6 +665,7 @@ useEffect(() => {
     brand !== "Todas";
 
   function clearFilters() {
+    setSearchInput("");
     setSearch("");
     setCategory("Todos");
     setBrand("Todas");
@@ -707,27 +739,31 @@ useEffect(() => {
 
           {/* BUSCADOR */}
           <div className="hidden flex-1 md:block">
-
-            <div className="relative">
-
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleSearchSubmit();
+              }}
+              className="flex w-full"
+            >
               <input
                 type="search"
-                value={search}
+                value={searchInput}
                 onChange={(event) =>
-                  setSearch(
-                    event.target.value
-                  )
+                  setSearchInput(event.target.value)
                 }
                 placeholder="Buscar productos, sabores, marcas..."
-                className="w-full rounded-xl border border-zinc-300 bg-white px-5 py-3.5 pr-14 text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-red-500"
+                className="w-full rounded-l-xl border border-zinc-300 bg-white px-5 py-3.5 text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-red-500"
               />
 
-              <div className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg bg-red-600">
+              <button
+                type="submit"
+                aria-label="Buscar"
+                className="rounded-r-xl bg-red-600 px-5 text-xl text-white transition hover:bg-red-500"
+              >
                 🔍
-              </div>
-
-            </div>
-
+              </button>
+            </form>
           </div>
 
           <div className="ml-auto flex items-center gap-3">
@@ -746,15 +782,11 @@ useEffect(() => {
             </a>
 
             <a
-              href="/admin"
-              className="hidden rounded-xl border border-zinc-200 bg-zinc-100 px-4 py-3 text-sm font-bold transition hover:border-red-500 hover:text-red-500 sm:block"
+              href="/admin/login"
+              className="flex min-w-fit items-center justify-center rounded-xl border border-zinc-200 bg-zinc-100 px-3 py-3 text-sm font-bold text-zinc-900 transition hover:border-red-500 hover:text-red-500 sm:px-4"
             >
               Admin
             </a>
-
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-600 text-sm font-black">
-              +18
-            </div>
 
           </div>
 
@@ -762,19 +794,31 @@ useEffect(() => {
 
         {/* BUSCADOR MÓVIL */}
         <div className="px-5 pb-4 md:hidden">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleSearchSubmit();
+            }}
+            className="flex w-full"
+          >
+            <input
+              type="search"
+              value={searchInput}
+              onChange={(event) =>
+                setSearchInput(event.target.value)
+              }
+              placeholder="Buscar productos..."
+              className="min-w-0 flex-1 rounded-l-xl border border-zinc-300 bg-white px-4 py-3 text-zinc-900 outline-none focus:border-red-500"
+            />
 
-          <input
-            type="search"
-            value={search}
-            onChange={(event) =>
-              setSearch(
-                event.target.value
-              )
-            }
-            placeholder="Buscar productos..."
-            className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-zinc-900 outline-none focus:border-red-500"
-          />
-
+            <button
+              type="submit"
+              aria-label="Buscar"
+              className="rounded-r-xl bg-red-600 px-5 text-xl text-white transition hover:bg-red-500"
+            >
+              🔍
+            </button>
+          </form>
         </div>
 
       </header>
@@ -784,72 +828,42 @@ useEffect(() => {
       ================================ */}
 
       <nav className="border-b border-zinc-200 bg-white">
-
         <div className="mx-auto max-w-7xl px-5 py-4">
-
           <div className="flex gap-3 overflow-x-auto pb-2">
 
             <button
               type="button"
-              onClick={() => {
-                setCategory("Todos");
-                setCurrentPage(1);
-              }}
-              className={`group flex min-w-[112px] flex-col items-center justify-center rounded-2xl border px-5 py-4 transition ${
+              onClick={() =>
+                handleCategorySelect("Todos")
+              }
+              className={`min-w-fit rounded-xl border px-6 py-4 font-black transition ${
                 category === "Todos"
                   ? "border-red-600 bg-red-600 text-white shadow-md"
-                  : "border-zinc-200 bg-white text-zinc-800 hover:border-red-500 hover:shadow-md"
+                  : "border-zinc-200 bg-white text-zinc-800 hover:border-red-500 hover:text-red-500"
               }`}
             >
-              <div
-                className={`flex h-12 w-12 items-center justify-center rounded-full text-xl ${
-                  category === "Todos"
-                    ? "bg-white/20"
-                    : "bg-red-50 text-red-600"
-                }`}
-              >
-                🏠
-              </div>
-
-              <span className="mt-3 text-sm font-black">
-                Todos
-              </span>
+              Todos
             </button>
 
             {categories.map((item) => (
               <button
                 key={item.name}
                 type="button"
-                onClick={() => {
-                  setCategory(item.name);
-                  setCurrentPage(1);
-                }}
-                className={`group flex min-w-[112px] flex-col items-center justify-center rounded-2xl border px-5 py-4 transition ${
+                onClick={() =>
+                  handleCategorySelect(item.name)
+                }
+                className={`min-w-fit rounded-xl border px-6 py-4 font-black transition ${
                   category === item.name
                     ? "border-red-600 bg-red-600 text-white shadow-md"
-                    : "border-zinc-200 bg-white text-zinc-800 hover:border-red-500 hover:shadow-md"
+                    : "border-zinc-200 bg-white text-zinc-800 hover:border-red-500 hover:text-red-500"
                 }`}
               >
-                <div
-                  className={`flex h-12 w-12 items-center justify-center rounded-full text-xl ${
-                    category === item.name
-                      ? "bg-white/20"
-                      : "bg-red-50 text-red-600"
-                  }`}
-                >
-                  
-                </div>
-
-                <span className="mt-3 text-sm font-black">
-                  {item.name}
-                </span>
+                {item.name}
               </button>
             ))}
 
           </div>
-
         </div>
-
       </nav>
 
       {/* ================================
