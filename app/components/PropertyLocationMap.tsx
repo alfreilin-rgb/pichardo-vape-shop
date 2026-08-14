@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  Map,
+  Map as MapLibreMap,
   Marker,
   NavigationControl,
   type MapMouseEvent,
@@ -15,6 +15,10 @@ type PropertyLocationMapProps = {
   initialLatitude?: number;
   initialLongitude?: number;
   readOnly?: boolean;
+  onLocationChange?: (
+    latitude: number,
+    longitude: number,
+  ) => void;
 };
 
 const DEFAULT_LATITUDE = 18.5601;
@@ -25,19 +29,48 @@ export default function PropertyLocationMap({
   initialLatitude = DEFAULT_LATITUDE,
   initialLongitude = DEFAULT_LONGITUDE,
   readOnly = false,
+  onLocationChange,
 }: PropertyLocationMapProps) {
   const mapContainer = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<Map | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
   const markerRef = useRef<Marker | null>(null);
 
   const [latitude, setLatitude] = useState(initialLatitude);
   const [longitude, setLongitude] =
     useState(initialLongitude);
 
+  function normalizePosition(lat: number, lng: number) {
+    if (locationType === "aproximada") {
+      return {
+        latitude: Number(lat.toFixed(3)),
+        longitude: Number(lng.toFixed(3)),
+      };
+    }
+
+    return {
+      latitude: lat,
+      longitude: lng,
+    };
+  }
+
+  function updatePosition(lat: number, lng: number) {
+    markerRef.current?.setLngLat([lng, lat]);
+
+    setLatitude(lat);
+    setLongitude(lng);
+
+    const normalized = normalizePosition(lat, lng);
+
+    onLocationChange?.(
+      normalized.latitude,
+      normalized.longitude,
+    );
+  }
+
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
 
-    const map = new Map({
+    const map = new MapLibreMap({
       container: mapContainer.current,
       style: {
         version: 8,
@@ -87,11 +120,8 @@ export default function PropertyLocationMap({
       .setLngLat([initialLongitude, initialLatitude])
       .addTo(map);
 
-    function updatePosition(lat: number, lng: number) {
-      marker.setLngLat([lng, lat]);
-      setLatitude(lat);
-      setLongitude(lng);
-    }
+    mapRef.current = map;
+    markerRef.current = marker;
 
     if (!readOnly) {
       marker.on("dragend", () => {
@@ -107,8 +137,15 @@ export default function PropertyLocationMap({
       });
     }
 
-    mapRef.current = map;
-    markerRef.current = marker;
+    const initial = normalizePosition(
+      initialLatitude,
+      initialLongitude,
+    );
+
+    onLocationChange?.(
+      initial.latitude,
+      initial.longitude,
+    );
 
     return () => {
       marker.remove();
@@ -116,7 +153,7 @@ export default function PropertyLocationMap({
       markerRef.current = null;
       mapRef.current = null;
     };
-  }, [initialLatitude, initialLongitude, readOnly]);
+  }, []);
 
   useEffect(() => {
     if (!mapRef.current || !markerRef.current) return;
@@ -134,7 +171,33 @@ export default function PropertyLocationMap({
 
     setLatitude(initialLatitude);
     setLongitude(initialLongitude);
-  }, [initialLatitude, initialLongitude, readOnly]);
+
+    const normalized = normalizePosition(
+      initialLatitude,
+      initialLongitude,
+    );
+
+    onLocationChange?.(
+      normalized.latitude,
+      normalized.longitude,
+    );
+  }, [
+    initialLatitude,
+    initialLongitude,
+    readOnly,
+  ]);
+
+  useEffect(() => {
+    const normalized = normalizePosition(
+      latitude,
+      longitude,
+    );
+
+    onLocationChange?.(
+      normalized.latitude,
+      normalized.longitude,
+    );
+  }, [locationType]);
 
   const displayedLatitude =
     locationType === "aproximada"
@@ -159,23 +222,6 @@ export default function PropertyLocationMap({
         ref={mapContainer}
         className="h-[460px] w-full overflow-hidden rounded-3xl border border-slate-200 shadow-sm"
       />
-
-      {!readOnly && (
-        <>
-          <input
-            type="hidden"
-            name="latitude"
-            value={displayedLatitude}
-            readOnly
-          />
-          <input
-            type="hidden"
-            name="longitude"
-            value={displayedLongitude}
-            readOnly
-          />
-        </>
-      )}
 
       {!readOnly && (
         <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">

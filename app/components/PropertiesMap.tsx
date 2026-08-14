@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import {
-  Map,
+  Map as MapLibreMap,
   Marker,
   NavigationControl,
   Popup,
@@ -33,6 +33,7 @@ function propertyPrice(property: Property) {
 
   if (amount >= 1_000_000) {
     const millions = amount / 1_000_000;
+
     return `RD$${millions.toFixed(
       millions % 1 === 0 ? 0 : 1,
     )}M`;
@@ -45,6 +46,12 @@ function propertyPrice(property: Property) {
   return `RD$${amount.toLocaleString("es-DO")}`;
 }
 
+function markerSizeForZoom(zoom: number) {
+  if (zoom < 10) return "tiny";
+  if (zoom < 12) return "small";
+  return "normal";
+}
+
 export default function PropertiesMap({
   properties,
   selectedId,
@@ -52,16 +59,45 @@ export default function PropertiesMap({
   userLocation = null,
 }: PropertiesMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<Map | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
+
   const markersRef = useRef<Map<number, Marker>>(
     new globalThis.Map(),
   );
+
   const userMarkerRef = useRef<Marker | null>(null);
+  const activePopupRef = useRef<Popup | null>(null);
+
+  function closeActivePopup() {
+    activePopupRef.current?.remove();
+    activePopupRef.current = null;
+  }
+
+  function updateMarkerSizes() {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const size = markerSizeForZoom(map.getZoom());
+
+    markersRef.current.forEach((marker: Marker) => {
+      const element = marker.getElement();
+
+      element.classList.remove(
+        "puntahogar-marker-normal",
+        "puntahogar-marker-small",
+        "puntahogar-marker-tiny",
+      );
+
+      element.classList.add(
+        `puntahogar-marker-${size}`,
+      );
+    });
+  }
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    const map = new Map({
+    const map = new MapLibreMap({
       container: containerRef.current,
       style: {
         version: 8,
@@ -102,15 +138,26 @@ export default function PropertiesMap({
       "top-right",
     );
 
+    map.on("zoom", updateMarkerSizes);
+
+    map.on("zoomstart", () => {
+      closeActivePopup();
+    });
+
     mapRef.current = map;
 
     return () => {
-      markersRef.current.forEach((marker) =>
+      closeActivePopup();
+
+      markersRef.current.forEach((marker: Marker) =>
         marker.remove(),
       );
+
       markersRef.current.clear();
       userMarkerRef.current?.remove();
       userMarkerRef.current = null;
+
+      map.off("zoom", updateMarkerSizes);
       map.remove();
       mapRef.current = null;
     };
@@ -120,9 +167,12 @@ export default function PropertiesMap({
     const map = mapRef.current;
     if (!map) return;
 
-    markersRef.current.forEach((marker) =>
+    closeActivePopup();
+
+    markersRef.current.forEach((marker: Marker) =>
       marker.remove(),
     );
+
     markersRef.current.clear();
 
     const validProperties = properties.filter(
@@ -134,17 +184,14 @@ export default function PropertiesMap({
     validProperties.forEach((property) => {
       const element = document.createElement("button");
       element.type = "button";
-      element.className = "puntahogar-price-marker";
+      element.className =
+        "puntahogar-price-marker puntahogar-marker-normal";
       element.textContent = propertyPrice(property);
+
       element.setAttribute(
         "aria-label",
         `Ver ${property.title}`,
       );
-
-      element.addEventListener("click", (event) => {
-        event.stopPropagation();
-        onSelect(property);
-      });
 
       const image =
         property.images?.[0] ||
@@ -190,9 +237,32 @@ export default function PropertiesMap({
 
       const popup = new Popup({
         offset: 24,
-        closeButton: false,
+        closeButton: true,
+        closeOnClick: false,
         maxWidth: "280px",
       }).setDOMContent(popupNode);
+
+      popup.on("close", () => {
+        if (activePopupRef.current === popup) {
+          activePopupRef.current = null;
+        }
+      });
+
+      element.addEventListener("click", (event) => {
+        event.stopPropagation();
+
+        closeActivePopup();
+        onSelect(property);
+
+        popup
+          .setLngLat([
+            Number(property.longitude),
+            Number(property.latitude),
+          ])
+          .addTo(map);
+
+        activePopupRef.current = popup;
+      });
 
       const marker = new Marker({
         element,
@@ -202,16 +272,18 @@ export default function PropertiesMap({
           Number(property.longitude),
           Number(property.latitude),
         ])
-        .setPopup(popup)
         .addTo(map);
 
       markersRef.current.set(property.id, marker);
     });
 
+    updateMarkerSizes();
+
     if (validProperties.length > 0) {
       const longitudes = validProperties.map((property) =>
         Number(property.longitude),
       );
+
       const latitudes = validProperties.map((property) =>
         Number(property.latitude),
       );
@@ -225,8 +297,14 @@ export default function PropertiesMap({
       } else {
         map.fitBounds(
           [
-            [Math.min(...longitudes), Math.min(...latitudes)],
-            [Math.max(...longitudes), Math.max(...latitudes)],
+            [
+              Math.min(...longitudes),
+              Math.min(...latitudes),
+            ],
+            [
+              Math.max(...longitudes),
+              Math.max(...latitudes),
+            ],
           ],
           {
             padding: 80,
@@ -249,7 +327,7 @@ export default function PropertiesMap({
 
     const element = document.createElement("div");
     element.className = "puntahogar-user-marker";
-    element.innerHTML = '<span></span>';
+    element.innerHTML = "<span></span>";
 
     const marker = new Marker({
       element,
@@ -265,27 +343,30 @@ export default function PropertiesMap({
   }, [userLocation]);
 
   useEffect(() => {
-    if (!selectedId || !mapRef.current) return;
+    const map = mapRef.current;
+
+    if (!selectedId || !map) {
+      closeActivePopup();
+      return;
+    }
 
     const property = properties.find(
       (item) => item.id === selectedId,
     );
 
-    const marker = markersRef.current.get(selectedId);
+    if (!property) return;
 
-    if (!property || !marker) return;
+    closeActivePopup();
 
-    mapRef.current.flyTo({
+    map.flyTo({
       center: [
         Number(property.longitude),
         Number(property.latitude),
       ],
-      zoom: 15,
+      zoom: Math.max(map.getZoom(), 14),
       duration: 900,
       essential: true,
     });
-
-    marker.togglePopup();
   }, [selectedId, properties]);
 
   return (
@@ -298,23 +379,68 @@ export default function PropertiesMap({
       <style jsx global>{`
         .puntahogar-price-marker {
           cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
           border: 2px solid white;
           border-radius: 9999px;
           background: #059669;
-          padding: 8px 12px;
           color: white;
-          font-size: 12px;
           font-weight: 800;
           line-height: 1;
+          white-space: nowrap;
           box-shadow: 0 6px 18px rgba(15, 23, 42, 0.25);
+          transform-origin: bottom center;
           transition:
+            min-width 180ms ease,
+            width 180ms ease,
+            height 180ms ease,
+            padding 180ms ease,
+            font-size 180ms ease,
             transform 160ms ease,
             background 160ms ease;
         }
 
+        .puntahogar-marker-normal {
+          min-width: 72px;
+          height: 38px;
+          padding: 8px 12px;
+          font-size: 12px;
+        }
+
+        .puntahogar-marker-small {
+          min-width: 52px;
+          height: 28px;
+          padding: 5px 8px;
+          font-size: 10px;
+          box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
+        }
+
+        .puntahogar-marker-tiny {
+          width: 18px;
+          min-width: 18px;
+          height: 18px;
+          padding: 0;
+          overflow: hidden;
+          color: transparent;
+          font-size: 0;
+          border-width: 2px;
+          box-shadow: 0 3px 9px rgba(15, 23, 42, 0.2);
+        }
+
         .puntahogar-price-marker:hover {
           background: #047857;
-          transform: translateY(-2px) scale(1.05);
+          transform: translateY(-2px) scale(1.08);
+          z-index: 20;
+        }
+
+        .puntahogar-marker-tiny:hover {
+          width: auto;
+          min-width: 58px;
+          height: 28px;
+          padding: 5px 8px;
+          color: white;
+          font-size: 10px;
         }
 
         .puntahogar-user-marker {
@@ -341,16 +467,33 @@ export default function PropertiesMap({
             transform: scale(0.7);
             opacity: 0.9;
           }
+
           100% {
             transform: scale(1.8);
             opacity: 0;
           }
         }
 
+        .maplibregl-popup {
+          z-index: 30;
+        }
+
         .maplibregl-popup-content {
           border-radius: 18px;
           padding: 12px;
           box-shadow: 0 18px 45px rgba(15, 23, 42, 0.2);
+        }
+
+        .maplibregl-popup-close-button {
+          right: 8px;
+          top: 7px;
+          width: 28px;
+          height: 28px;
+          border-radius: 9999px;
+          background: rgba(255, 255, 255, 0.94);
+          color: #0f172a;
+          font-size: 20px;
+          line-height: 24px;
         }
 
         .maplibregl-ctrl-group {

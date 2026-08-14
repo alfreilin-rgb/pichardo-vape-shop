@@ -25,6 +25,7 @@ import PropertyLocationMap from "../components/PropertyLocationMap";
 import { supabase } from "../lib/supabase/client";
 import { getOwnerToken } from "../lib/puntahogar";
 
+
 const steps = [
   "Tipo",
   "Operación",
@@ -60,6 +61,8 @@ const zones = [
 ];
 
 export default function PublicarPropiedad() {
+  const [latitude, setLatitude] = useState(18.5601);
+  const [longitude, setLongitude] = useState(-68.3725);
   const [step, setStep] = useState(0);
   const [tipoUbicacion, setTipoUbicacion] = useState<
     "exacta" | "aproximada"
@@ -244,6 +247,8 @@ export default function PublicarPropiedad() {
           </div>
 
           <form onSubmit={handleSubmit}>
+            <input type="hidden" name="latitude" value={latitude} />
+            <input type="hidden" name="longitude" value={longitude} />
             <div className="min-h-[520px] p-6 md:p-10">
               {step === 0 && (
                 <section>
@@ -500,7 +505,15 @@ export default function PublicarPropiedad() {
                   </div>
 
                   <div className="mt-6">
-                    <PropertyLocationMap locationType={tipoUbicacion} />
+                    <PropertyLocationMap
+                      locationType={tipoUbicacion}
+                      initialLatitude={latitude}
+                      initialLongitude={longitude}
+                      onLocationChange={(newLatitude, newLongitude) => {
+                        setLatitude(newLatitude);
+                        setLongitude(newLongitude);
+                      }}
+                    />
                   </div>
                 </section>
               )}

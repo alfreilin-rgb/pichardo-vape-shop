@@ -2,176 +2,358 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import PropertyLocationMap from "../../components/PropertyLocationMap";
 import { supabase } from "../../lib/supabase/client";
-import { formatPrice, Property } from "../../lib/puntahogar";
 
-export default function PropertyDetailPage() {
+type Product = {
+  id: number;
+  name: string;
+  brand: string;
+  category: string;
+  flavor: string | null;
+  puffs: number | null;
+  price: number;
+  old_price: number | null;
+  stock: number;
+  description: string | null;
+  images: string[];
+  is_new: boolean;
+  is_restocked: boolean;
+  is_sale: boolean;
+  featured: boolean;
+  status: "Disponible" | "Agotado" | "Oculto";
+};
+
+export default function ProductPage() {
   const params = useParams();
-  const [property, setProperty] = useState<Property | null>(null);
-  const [selectedImage, setSelectedImage] = useState("");
+
+  const [product, setProduct] =
+    useState<Product | null>(null);
+
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] =
+    useState("");
 
   useEffect(() => {
-    loadProperty();
+    if (params.id) {
+      loadProduct();
+    }
   }, [params.id]);
 
-  async function loadProperty() {
+  async function loadProduct() {
+    setLoading(true);
+    setErrorMessage("");
+
     const id = Number(params.id);
 
     const { data, error } = await supabase
-      .from("properties")
+      .from("products")
       .select("*")
       .eq("id", id)
-      .eq("status", "Aprobada")
-      .single();
+      .neq("status", "Oculto")
+      .maybeSingle();
 
-    if (error || !data) {
-      setProperty(null);
+    if (error) {
+      console.error(error);
+
+      setErrorMessage(
+        `No se pudo cargar el producto: ${error.message}`
+      );
+
       setLoading(false);
       return;
     }
 
-    const current = data as Property;
-    const viewedKey = `puntahogar-viewed-${id}`;
+    if (!data) {
+      setErrorMessage(
+        "Este producto no existe o no está disponible."
+      );
 
-    if (!sessionStorage.getItem(viewedKey)) {
-      const newViews = (current.views || 0) + 1;
-      await supabase
-        .from("properties")
-        .update({ views: newViews })
-        .eq("id", id);
-
-      current.views = newViews;
-      sessionStorage.setItem(viewedKey, "1");
+      setLoading(false);
+      return;
     }
 
-    setProperty(current);
-    setSelectedImage(current.images?.[0] || "");
+    setProduct(data as Product);
     setLoading(false);
   }
 
-  async function contactWhatsApp() {
-    if (!property) return;
-
-    await supabase
-      .from("properties")
-      .update({
-        whatsapp_clicks: (property.whatsapp_clicks || 0) + 1,
-      })
-      .eq("id", property.id);
-
-    let number = property.whatsapp.replace(/\D/g, "");
-    if (number.length === 10) number = `1${number}`;
-
-    window.open(
-      `https://wa.me/${number}?text=${encodeURIComponent(
-        `Hola, estoy interesado en ${property.title}.`,
-      )}`,
-      "_blank",
-    );
-  }
-
-  async function registerPhone() {
-    if (!property) return;
-
-    await supabase
-      .from("properties")
-      .update({
-        phone_clicks: (property.phone_clicks || 0) + 1,
-      })
-      .eq("id", property.id);
-  }
-
-  if (loading) return <main className="p-10 text-center">Cargando...</main>;
-
-  if (!property) {
+  if (loading) {
     return (
-      <main className="p-10 text-center">
-        <h1 className="text-3xl font-bold">Propiedad no encontrada</h1>
-        <a href="/" className="mt-5 inline-block text-blue-700">Volver</a>
+      <main className="flex min-h-screen items-center justify-center bg-[#080808] text-white">
+        <p className="text-zinc-400">
+          Cargando producto...
+        </p>
       </main>
     );
   }
 
+  if (!product || errorMessage) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center bg-[#080808] px-5 text-center text-white">
+
+        <h1 className="text-3xl font-black">
+          Producto no disponible
+        </h1>
+
+        <p className="mt-3 text-zinc-500">
+          {errorMessage}
+        </p>
+
+        <a
+          href="/"
+          className="mt-7 rounded-xl bg-red-600 px-6 py-3 font-black hover:bg-red-500"
+        >
+          Volver al catálogo
+        </a>
+
+      </main>
+    );
+  }
+
+  const available =
+    product.status === "Disponible" &&
+    product.stock > 0;
+
   return (
-    <main className="min-h-screen bg-slate-100 px-5 py-10 text-slate-900">
-      <div className="mx-auto max-w-7xl">
-        <a href="/" className="font-semibold text-blue-700 hover:underline">← Volver</a>
+    <main className="min-h-screen bg-[#080808] text-white">
 
-        <div className="mt-6 grid gap-8 lg:grid-cols-[1fr_360px]">
-          <div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 shadow-sm">
-              {selectedImage ? (
-                <img src={selectedImage} alt={property.title} className="h-[500px] w-full rounded-xl object-cover" />
+      {/* BARRA SUPERIOR */}
+      <div className="bg-red-600 px-5 py-2 text-center text-sm font-black">
+        PICHARDO VAPE SHOP · EL PAPÁ DE LOS PRECIOS · +18
+      </div>
+
+      {/* HEADER */}
+      <header className="border-b border-white/10 bg-black">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
+
+          <a
+            href="/"
+            className="flex items-center gap-3"
+          >
+            <img
+              src="/logo-pichardo.png"
+              alt="Pichardo Vape Shop"
+              className="h-16 w-16 object-contain"
+            />
+
+            <div className="hidden sm:block">
+              <p className="font-black">
+                PICHARDO
+              </p>
+
+              <p className="text-xs font-bold tracking-widest text-red-500">
+                VAPE SHOP
+              </p>
+            </div>
+          </a>
+
+          <a
+            href="/"
+            className="rounded-xl border border-white/10 px-5 py-3 text-sm font-bold hover:border-red-500 hover:text-red-500"
+          >
+            ← Volver al catálogo
+          </a>
+
+        </div>
+      </header>
+
+      {/* PRODUCTO */}
+      <section className="px-5 py-10">
+        <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-2">
+
+          {/* FOTO */}
+          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black">
+
+            {product.is_sale && (
+              <span className="absolute left-5 top-5 z-20 rounded-lg bg-red-600 px-4 py-2 text-sm font-black">
+                OFERTA
+              </span>
+            )}
+
+            {product.is_new && (
+              <span className="absolute right-5 top-5 z-20 rounded-lg bg-violet-600 px-4 py-2 text-sm font-black">
+                NUEVO
+              </span>
+            )}
+
+            <div className="flex min-h-[500px] items-center justify-center p-5 lg:min-h-[650px]">
+
+              {product.images?.[0] ? (
+                <img
+                  src={product.images[0]}
+                  alt={product.name}
+                  className="max-h-[620px] w-full object-contain"
+                />
               ) : (
-                <div className="flex h-96 items-center justify-center bg-slate-200">Sin fotografía</div>
-              )}
+                <div className="text-center text-zinc-600">
+                  <p className="text-6xl">
+                    📷
+                  </p>
 
-              {property.images?.length > 1 && (
-                <div className="mt-4 grid grid-cols-4 gap-3">
-                  {property.images.map((image) => (
-                    <button key={image} onClick={() => setSelectedImage(image)}>
-                      <img src={image} alt="" className="h-24 w-full rounded-lg object-cover" />
-                    </button>
-                  ))}
+                  <p className="mt-3">
+                    Sin imagen
+                  </p>
                 </div>
               )}
-            </div>
 
-            <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-8 text-slate-900 shadow-sm">
-              <p className="font-semibold text-blue-700">{property.zone}</p>
-              <h1 className="mt-2 text-4xl font-bold text-slate-900">{property.title}</h1>
-              <p className="mt-5 text-3xl font-bold text-blue-700">
-                {formatPrice(property)}
-              </p>
-              <p className="mt-4 text-sm font-medium text-slate-600">
-                👁 {property.views || 0} visitas
-              </p>
-              <div className="mt-8 grid grid-cols-2 gap-4 border-y border-slate-200 py-6 text-center text-slate-800 sm:grid-cols-4">
-                <div><strong>{property.bedrooms}</strong><br />Habitaciones</div>
-                <div><strong>{property.bathrooms}</strong><br />Baños</div>
-                <div><strong>{property.parking}</strong><br />Parqueos</div>
-                <div><strong>{property.meters}</strong><br />m²</div>
-              </div>
-              <h2 className="mt-8 text-2xl font-bold text-slate-900">Descripción</h2>
-              <p className="mt-4 whitespace-pre-line leading-7 text-slate-700">
-                {property.description}
-              </p>
-            </div>
-
-            <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-8 text-slate-900 shadow-sm">
-              <h2 className="text-2xl font-bold text-slate-900">Ubicación</h2>
-              <div className="mt-5">
-                <PropertyLocationMap
-                  locationType={property.location_type}
-                  initialLatitude={property.latitude || 18.5601}
-                  initialLongitude={property.longitude || -68.3725}
-                  readOnly
-                />
-              </div>
             </div>
           </div>
 
-          <aside className="sticky top-6 h-fit rounded-2xl border border-slate-200 bg-white p-6 text-slate-900 shadow-sm">
-            <p className="text-sm font-medium text-slate-600">Publicado por</p>
-            <p className="mt-1 text-xl font-bold text-slate-900">{property.contact_name}</p>
-            <button
-              onClick={contactWhatsApp}
-              className="mt-6 w-full rounded-xl bg-green-600 px-5 py-4 font-semibold text-white hover:bg-green-700"
-            >
-              Contactar por WhatsApp
-            </button>
-            <a
-              href={`tel:${property.whatsapp}`}
-              onClick={registerPhone}
-              className="mt-3 block rounded-xl border border-slate-300 bg-white px-5 py-4 text-center font-semibold text-slate-900 hover:bg-slate-100"
-            >
-              Llamar
-            </a>
-          </aside>
+          {/* INFORMACIÓN */}
+          <div className="flex flex-col justify-center">
+
+            <p className="font-black uppercase tracking-[0.2em] text-red-500">
+              {product.brand || "Pichardo Vape Shop"}
+            </p>
+
+            <h1 className="mt-3 text-4xl font-black leading-tight md:text-5xl">
+              {product.name}
+            </h1>
+
+            <p className="mt-3 text-zinc-500">
+              {product.category}
+            </p>
+
+            {/* PRECIO */}
+            <div className="mt-7 flex items-end gap-4">
+
+              <p className="text-4xl font-black">
+                RD$
+                {Number(product.price).toLocaleString(
+                  "es-DO"
+                )}
+              </p>
+
+              {product.old_price && (
+                <p className="pb-1 text-lg text-zinc-600 line-through">
+                  RD$
+                  {Number(
+                    product.old_price
+                  ).toLocaleString("es-DO")}
+                </p>
+              )}
+
+            </div>
+
+            {/* DISPONIBILIDAD */}
+            <div className="mt-5 flex items-center gap-3">
+
+              <span
+                className={`h-3 w-3 rounded-full ${
+                  available
+                    ? "bg-emerald-500"
+                    : "bg-red-500"
+                }`}
+              />
+
+              <span
+                className={`font-bold ${
+                  available
+                    ? "text-emerald-400"
+                    : "text-red-400"
+                }`}
+              >
+                {available
+                  ? "Disponible"
+                  : "Agotado"}
+              </span>
+
+            </div>
+
+            {/* INFORMACIÓN RÁPIDA */}
+            <div className="mt-8 grid gap-3 sm:grid-cols-2">
+
+              {product.flavor && (
+                <div className="rounded-2xl border border-white/10 bg-[#111111] p-5">
+
+                  <p className="text-xs font-black uppercase tracking-widest text-zinc-500">
+                    Sabor
+                  </p>
+
+                  <p className="mt-2 text-lg font-black">
+                    {product.flavor}
+                  </p>
+
+                </div>
+              )}
+
+              {product.puffs && (
+                <div className="rounded-2xl border border-white/10 bg-[#111111] p-5">
+
+                  <p className="text-xs font-black uppercase tracking-widest text-zinc-500">
+                    Puffs
+                  </p>
+
+                  <p className="mt-2 text-lg font-black">
+                    {Number(
+                      product.puffs
+                    ).toLocaleString()}
+                  </p>
+
+                </div>
+              )}
+
+              <div className="rounded-2xl border border-white/10 bg-[#111111] p-5">
+
+                <p className="text-xs font-black uppercase tracking-widest text-zinc-500">
+                  Disponibilidad
+                </p>
+
+                <p className="mt-2 text-lg font-black">
+                  {available
+                    ? "En inventario"
+                    : "No disponible"}
+                </p>
+
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-[#111111] p-5">
+
+                <p className="text-xs font-black uppercase tracking-widest text-zinc-500">
+                  Categoría
+                </p>
+
+                <p className="mt-2 text-lg font-black">
+                  {product.category}
+                </p>
+
+              </div>
+
+            </div>
+
+            {/* DESCRIPCIÓN */}
+            {product.description && (
+              <div className="mt-8 border-t border-white/10 pt-8">
+
+                <h2 className="text-xl font-black">
+                  Descripción
+                </h2>
+
+                <p className="mt-4 whitespace-pre-line leading-7 text-zinc-400">
+                  {product.description}
+                </p>
+
+              </div>
+            )}
+
+            {/* INFORMACIÓN */}
+            <div className="mt-8 rounded-2xl border border-red-500/20 bg-red-500/5 p-5">
+
+              <p className="font-black text-red-400">
+                +18
+              </p>
+
+              <p className="mt-2 text-sm leading-6 text-zinc-400">
+                Producto destinado exclusivamente a
+                personas mayores de edad.
+              </p>
+
+            </div>
+
+          </div>
+
         </div>
-      </div>
+      </section>
+
     </main>
   );
 }

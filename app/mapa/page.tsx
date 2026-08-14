@@ -25,7 +25,7 @@ type UserLocation = {
 };
 
 type PropertyWithDistance = Property & {
-  distanceKm?: number;
+  distanceKm: number | null;
 };
 
 function distanceInKm(
@@ -106,19 +106,17 @@ export default function MapaPage() {
     const normalized = query.trim().toLowerCase();
 
     const rows: PropertyWithDistance[] = properties
-      .map((property) => {
-        if (!userLocation) return property;
-
-        return {
-          ...property,
-          distanceKm: distanceInKm(
-            userLocation.latitude,
-            userLocation.longitude,
-            Number(property.latitude),
-            Number(property.longitude),
-          ),
-        };
-      })
+      .map((property): PropertyWithDistance => ({
+        ...property,
+        distanceKm: userLocation
+          ? distanceInKm(
+              userLocation.latitude,
+              userLocation.longitude,
+              Number(property.latitude),
+              Number(property.longitude),
+            )
+          : null,
+      }))
       .filter((property) => {
         const matchesQuery =
           !normalized ||
@@ -135,7 +133,7 @@ export default function MapaPage() {
 
         const matchesDistance =
           !nearbyOnly ||
-          (property.distanceKm !== undefined &&
+          (property.distanceKm !== null &&
             property.distanceKm <= nearbyRadius);
 
         return (
@@ -424,9 +422,7 @@ export default function MapaPage() {
 
                 const active =
                   selected?.id === property.id;
-                const distance =
-                  (property as PropertyWithDistance)
-                    .distanceKm;
+                const distance = property.distanceKm;
 
                 return (
                   <button
@@ -464,7 +460,7 @@ export default function MapaPage() {
                           {formatPrice(property)}
                         </p>
 
-                        {distance !== undefined && (
+                        {distance !== null && (
                           <p className="mt-1 text-xs font-bold text-blue-700">
                             A {distance.toFixed(1)} km de ti
                           </p>
