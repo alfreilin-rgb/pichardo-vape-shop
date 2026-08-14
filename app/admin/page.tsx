@@ -93,73 +93,114 @@ export default function AdminPage() {
 
   async function verifyAdmin() {
     setLoading(true);
+    setErrorMessage("");
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
 
-    if (userError || !user) {
-      router.replace("/admin/login");
-      return;
+      if (sessionError || !session?.user) {
+        router.replace("/admin/login");
+        return;
+      }
+
+      const { data: adminRecord, error: adminError } =
+        await supabase
+          .from("admin_users")
+          .select("user_id")
+          .eq("user_id", session.user.id)
+          .maybeSingle();
+
+      if (adminError || !adminRecord) {
+        await supabase.auth.signOut();
+        router.replace("/admin/login");
+        return;
+      }
+
+      await Promise.all([
+        loadProducts(),
+        loadBrands(),
+      ]);
+    } catch (error) {
+      console.error("Error verificando administrador:", error);
+
+      setErrorMessage(
+        "No se pudo verificar la sesión. Intenta volver a iniciar sesión."
+      );
+    } finally {
+      setLoading(false);
     }
-
-    const { data: adminRecord, error: adminError } = await supabase
-      .from("admin_users")
-      .select("user_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (adminError || !adminRecord) {
-      await supabase.auth.signOut();
-      router.replace("/admin/login");
-      return;
-    }
-
-    await Promise.all([
-      loadProducts(),
-      loadBrands(),
-    ]);
   }
 
   async function loadBrands() {
-    const { data, error } = await supabase
-      .from("brands")
-      .select("id, name, logo")
-      .eq("active", true)
-      .order("name", { ascending: true });
+    try {
+      const { data, error } = await supabase
+        .from("brands")
+        .select("id, name, logo")
+        .eq("active", true)
+        .order("name", { ascending: true });
 
-    if (error) {
-      console.error("Error cargando marcas:", error);
-      return;
+      if (error) {
+        console.error("Error cargando marcas:", error);
+        return;
+      }
+
+      setBrands((data || []) as Brand[]);
+    } catch (error) {
+      console.error("Error inesperado cargando marcas:", error);
     }
-
-    setBrands((data || []) as Brand[]);
   }
 
   async function loadProducts() {
-    setLoading(true);
     setErrorMessage("");
 
-    const { data, error } = await supabase
-      .from("products")
-      .select("*")
-      .order("created_at", { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from("products")
+        .select(`
+          id,
+          name,
+          brand,
+          category,
+          flavor,
+          puffs,
+          price,
+          old_price,
+          stock,
+          description,
+          images,
+          is_new,
+          is_restocked,
+          is_sale,
+          featured,
+          status,
+          created_at,
+          updated_at
+        `)
+        .order("created_at", { ascending: false });
 
-    if (error) {
-      console.error(error);
+      if (error) {
+        console.error(error);
 
-      setErrorMessage(
-        `No se pudieron cargar los productos: ${error.message}`
-      );
+        setErrorMessage(
+          `No se pudieron cargar los productos: ${error.message}`
+        );
+
+        setProducts([]);
+        return;
+      }
+
+      setProducts((data || []) as Product[]);
+    } catch (error) {
+      console.error("Error inesperado cargando productos:", error);
 
       setProducts([]);
-      setLoading(false);
-      return;
+      setErrorMessage(
+        "No se pudieron cargar los productos."
+      );
     }
-
-    setProducts((data || []) as Product[]);
-    setLoading(false);
   }
 
   function resetForm() {
@@ -611,6 +652,13 @@ export default function AdminPage() {
             >
               Actualizar
             </button>
+
+            <a
+              href="/admin/marcas"
+              className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-bold hover:border-red-500"
+            >
+              Marcas
+            </a>
 
             <a
               href="/"
@@ -1321,12 +1369,6 @@ export default function AdminPage() {
                     >
                       Eliminar
                     </button>
-                    <a
-  href="/admin/marcas"
-  className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-bold hover:border-red-500"
->
-  Marcas
-</a>
 
                   </div>
 
