@@ -706,19 +706,18 @@ useEffect(() => {
 
       <header className="border-b border-zinc-200 bg-white shadow-sm">
 
-        <div className="mx-auto flex max-w-7xl items-center gap-6 px-5 py-4">
+       <div className="mx-auto flex max-w-7xl items-center gap-8 px-5 py-6 md:py-7">
 
           <a
             href="/"
             className="flex min-w-fit items-center gap-3"
           >
 
-            <img
-              src="/logo-pichardo.png"
-              alt="Pichardo Vape Shop"
-              className="h-20 w-20 object-contain md:h-24 md:w-24"
-            />
-
+<img
+  src="/logo-pichardo.png"
+  alt="Pichardo Vape Shop"
+  className="h-24 w-24 object-contain md:h-32 md:w-32"
+/>
             <div className="hidden sm:block">
 
               <p className="text-xl font-black uppercase tracking-tight">
@@ -965,11 +964,11 @@ useEffect(() => {
 
             <div className="absolute h-80 w-80 rounded-full bg-red-600/15 blur-[100px]" />
 
-            <img
-              src="/logo-pichardo.png"
-              alt="Pichardo Vape Shop"
-              className="relative z-10 w-[70%] max-w-md object-contain drop-shadow-2xl"
-            />
+         <img
+  src="/logo-delivery.png"
+  alt="Pichardo Vape Shop - Delivery Disponible"
+  className="relative z-10 h-full w-full object-contain"
+/>
 
           </div>
 
@@ -1712,7 +1711,39 @@ useEffect(() => {
           </p>
 
         </div>
+{/* LOGO + DELIVERY */}
+<div className="relative flex min-h-[420px] flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-red-950/60 via-black to-violet-950/60 px-6 py-10">
 
+  {/* LUZ DE FONDO */}
+  <div className="absolute h-80 w-80 rounded-full bg-red-600/15 blur-[100px]" />
+
+  {/* LOGO */}
+  <img
+    src="/logo-pichardo.png"
+    alt="Pichardo Vape Shop"
+    className="relative z-10 w-[70%] max-w-md object-contain drop-shadow-2xl"
+  />
+
+  {/* DELIVERY DISPONIBLE */}
+  <div className="relative z-20 mt-5 flex items-center gap-3 rounded-full border border-red-500/40 bg-black/70 px-6 py-3 shadow-xl backdrop-blur-sm">
+
+    <span className="text-3xl" aria-hidden="true">
+      🛵
+    </span>
+
+    <div>
+      <p className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-400">
+        Servicio de
+      </p>
+
+      <p className="text-lg font-black uppercase tracking-wide text-white">
+        Delivery Disponible
+      </p>
+    </div>
+
+  </div>
+
+</div>
       </footer>
 
 
@@ -1724,9 +1755,15 @@ useEffect(() => {
   target="_blank"
   rel="noopener noreferrer"
   aria-label="Contactar por WhatsApp"
-  className="fixed bottom-6 right-6 z-50 flex h-16 w-16 items-center justify-center rounded-full bg-green-600 text-3xl text-white shadow-2xl transition hover:scale-110 hover:bg-green-500"
+  title="Delivery / WhatsApp"
+  className="fixed bottom-6 right-6 z-50 flex h-16 w-16 items-center justify-center rounded-full bg-green-600 text-white shadow-2xl transition hover:scale-110 hover:bg-green-500"
 >
-  ☎
+  <span
+    aria-hidden="true"
+    className="text-3xl leading-none"
+  >
+    🛵
+  </span>
 </a>
 
     </main>

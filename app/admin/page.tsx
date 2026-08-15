@@ -93,114 +93,73 @@ export default function AdminPage() {
 
   async function verifyAdmin() {
     setLoading(true);
-    setErrorMessage("");
 
-    try {
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
 
-      if (sessionError || !session?.user) {
-        router.replace("/admin/login");
-        return;
-      }
-
-      const { data: adminRecord, error: adminError } =
-        await supabase
-          .from("admin_users")
-          .select("user_id")
-          .eq("user_id", session.user.id)
-          .maybeSingle();
-
-      if (adminError || !adminRecord) {
-        await supabase.auth.signOut();
-        router.replace("/admin/login");
-        return;
-      }
-
-      await Promise.all([
-        loadProducts(),
-        loadBrands(),
-      ]);
-    } catch (error) {
-      console.error("Error verificando administrador:", error);
-
-      setErrorMessage(
-        "No se pudo verificar la sesión. Intenta volver a iniciar sesión."
-      );
-    } finally {
-      setLoading(false);
+    if (userError || !user) {
+      router.replace("/admin/login");
+      return;
     }
+
+    const { data: adminRecord, error: adminError } = await supabase
+      .from("admin_users")
+      .select("user_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (adminError || !adminRecord) {
+      await supabase.auth.signOut();
+      router.replace("/admin/login");
+      return;
+    }
+
+    await Promise.all([
+      loadProducts(),
+      loadBrands(),
+    ]);
   }
 
   async function loadBrands() {
-    try {
-      const { data, error } = await supabase
-        .from("brands")
-        .select("id, name, logo")
-        .eq("active", true)
-        .order("name", { ascending: true });
+    const { data, error } = await supabase
+      .from("brands")
+      .select("id, name, logo")
+      .eq("active", true)
+      .order("name", { ascending: true });
 
-      if (error) {
-        console.error("Error cargando marcas:", error);
-        return;
-      }
-
-      setBrands((data || []) as Brand[]);
-    } catch (error) {
-      console.error("Error inesperado cargando marcas:", error);
+    if (error) {
+      console.error("Error cargando marcas:", error);
+      return;
     }
+
+    setBrands((data || []) as Brand[]);
   }
 
   async function loadProducts() {
+    setLoading(true);
     setErrorMessage("");
 
-    try {
-      const { data, error } = await supabase
-        .from("products")
-        .select(`
-          id,
-          name,
-          brand,
-          category,
-          flavor,
-          puffs,
-          price,
-          old_price,
-          stock,
-          description,
-          images,
-          is_new,
-          is_restocked,
-          is_sale,
-          featured,
-          status,
-          created_at,
-          updated_at
-        `)
-        .order("created_at", { ascending: false });
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-      if (error) {
-        console.error(error);
+    if (error) {
+      console.error(error);
 
-        setErrorMessage(
-          `No se pudieron cargar los productos: ${error.message}`
-        );
-
-        setProducts([]);
-        return;
-      }
-
-      setProducts((data || []) as Product[]);
-    } catch (error) {
-      console.error("Error inesperado cargando productos:", error);
+      setErrorMessage(
+        `No se pudieron cargar los productos: ${error.message}`
+      );
 
       setProducts([]);
-      setErrorMessage(
-        "No se pudieron cargar los productos."
-      );
+      setLoading(false);
+      return;
     }
+
+    setProducts((data || []) as Product[]);
+    setLoading(false);
   }
 
   function resetForm() {
@@ -261,6 +220,90 @@ export default function AdminPage() {
     }, 50);
   }
 
+
+  async function compressImageToWebP(
+    file: File,
+    maxDimension = 1600,
+    quality = 0.8
+  ): Promise<File> {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        if (typeof reader.result === "string") {
+          resolve(reader.result);
+        } else {
+          reject(new Error("No se pudo leer la imagen."));
+        }
+      };
+
+      reader.onerror = () => {
+        reject(new Error("No se pudo leer la imagen."));
+      };
+
+      reader.readAsDataURL(file);
+    });
+
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+
+      img.onload = () => resolve(img);
+      img.onerror = () =>
+        reject(new Error(`No se pudo procesar "${file.name}".`));
+
+      img.src = dataUrl;
+    });
+
+    let width = image.naturalWidth || image.width;
+    let height = image.naturalHeight || image.height;
+
+    if (!width || !height) {
+      throw new Error(`"${file.name}" no tiene dimensiones válidas.`);
+    }
+
+    const longestSide = Math.max(width, height);
+
+    if (longestSide > maxDimension) {
+      const scale = maxDimension / longestSide;
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      throw new Error("No se pudo preparar la compresión de imágenes.");
+    }
+
+    context.drawImage(image, 0, 0, width, height);
+
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (result) => {
+          if (result) {
+            resolve(result);
+          } else {
+            reject(new Error("No se pudo comprimir la imagen."));
+          }
+        },
+        "image/webp",
+        quality
+      );
+    });
+
+    const baseName =
+      file.name.replace(/\.[^/.]+$/, "") || "producto";
+
+    return new File([blob], `${baseName}.webp`, {
+      type: "image/webp",
+      lastModified: Date.now(),
+    });
+  }
+
   async function uploadProductImages(files: FileList) {
     try {
       setUploadingImages(true);
@@ -281,6 +324,8 @@ export default function AdminPage() {
       }
 
       const uploadedUrls: string[] = [];
+      let originalBytes = 0;
+      let optimizedBytes = 0;
 
       for (const file of selectedFiles) {
         if (!file.type.startsWith("image/")) {
@@ -290,47 +335,62 @@ export default function AdminPage() {
           continue;
         }
 
-        const maxSize = 8 * 1024 * 1024;
+        const maxOriginalSize = 20 * 1024 * 1024;
 
-        if (file.size > maxSize) {
+        if (file.size > maxOriginalSize) {
           setErrorMessage(
-            `"${file.name}" supera el máximo permitido de 8 MB.`
+            `"${file.name}" supera el máximo permitido de 20 MB antes de comprimir.`
           );
           continue;
         }
 
-        const extension =
-          file.name.split(".").pop()?.toLowerCase() || "jpg";
+        try {
+          originalBytes += file.size;
 
-        const safeName = `${Date.now()}-${Math.random()
-          .toString(36)
-          .substring(2, 10)}.${extension}`;
-
-        const filePath = safeName;
-
-        const { error: uploadError } = await supabase.storage
-          .from("products")
-          .upload(filePath, file, {
-            cacheControl: "3600",
-            upsert: false,
-            contentType: file.type,
-          });
-
-        if (uploadError) {
-          console.error(uploadError);
-
-          setErrorMessage(
-            `No se pudo subir "${file.name}": ${uploadError.message}`
+          const optimizedFile = await compressImageToWebP(
+            file,
+            1600,
+            0.8
           );
 
-          continue;
+          optimizedBytes += optimizedFile.size;
+
+          const safeName = `${Date.now()}-${Math.random()
+            .toString(36)
+            .substring(2, 10)}.webp`;
+
+          const { error: uploadError } =
+            await supabase.storage
+              .from("products")
+              .upload(safeName, optimizedFile, {
+                cacheControl: "31536000",
+                upsert: false,
+                contentType: "image/webp",
+              });
+
+          if (uploadError) {
+            console.error(uploadError);
+
+            setErrorMessage(
+              `No se pudo subir "${file.name}": ${uploadError.message}`
+            );
+            continue;
+          }
+
+          const { data } = supabase.storage
+            .from("products")
+            .getPublicUrl(safeName);
+
+          uploadedUrls.push(data.publicUrl);
+        } catch (imageError) {
+          console.error(imageError);
+
+          setErrorMessage(
+            imageError instanceof Error
+              ? imageError.message
+              : `No se pudo procesar "${file.name}".`
+          );
         }
-
-        const { data } = supabase.storage
-          .from("products")
-          .getPublicUrl(filePath);
-
-        uploadedUrls.push(data.publicUrl);
       }
 
       if (uploadedUrls.length > 0) {
@@ -339,15 +399,30 @@ export default function AdminPage() {
           images: [...current.images, ...uploadedUrls],
         }));
 
+        const originalMb = originalBytes / 1024 / 1024;
+        const optimizedMb = optimizedBytes / 1024 / 1024;
+
+        const savedPercent =
+          originalBytes > 0
+            ? Math.max(
+                0,
+                Math.round(
+                  (1 - optimizedBytes / originalBytes) * 100
+                )
+              )
+            : 0;
+
         setSuccessMessage(
-          `${uploadedUrls.length} imagen(es) subida(s) correctamente.`
+          `${uploadedUrls.length} imagen(es) optimizada(s) y subida(s). ` +
+            `${originalMb.toFixed(1)} MB → ${optimizedMb.toFixed(1)} MB ` +
+            `(${savedPercent}% menos).`
         );
       }
     } catch (error) {
       console.error(error);
 
       setErrorMessage(
-        "Ocurrió un error inesperado al subir las imágenes."
+        "Ocurrió un error inesperado al comprimir o subir las imágenes."
       );
     } finally {
       setUploadingImages(false);
@@ -652,13 +727,6 @@ export default function AdminPage() {
             >
               Actualizar
             </button>
-
-            <a
-              href="/admin/marcas"
-              className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-bold hover:border-red-500"
-            >
-              Marcas
-            </a>
 
             <a
               href="/"
@@ -996,7 +1064,7 @@ export default function AdminPage() {
                   </span>
 
                   <span className="mt-1 text-xs text-zinc-500">
-                    Hasta 6 imágenes
+                    Hasta 6 imágenes · Se comprimen automáticamente a WebP
                   </span>
 
                   <input
@@ -1369,6 +1437,12 @@ export default function AdminPage() {
                     >
                       Eliminar
                     </button>
+                    <a
+  href="/admin/marcas"
+  className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-bold hover:border-red-500"
+>
+  Marcas
+</a>
 
                   </div>
 
